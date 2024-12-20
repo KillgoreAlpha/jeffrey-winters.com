@@ -1,76 +1,67 @@
 <?php
 if (isset($_POST['Email'])) {
+    // Configuration
+    $email_to = "jeff@jeffrey-winters.com";
+    $email_subject = "Contact Form Submission"; // Default subject since form doesn't have subject field
 
-    // EDIT THE 2 LINES BELOW AS REQUIRED
-    $email_to = "jeffrey.winters@protonmail.com";
-    $email_subject = $_POST['Subject'];
+    // Security headers
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('X-XSS-Protection: 1; mode=block');
 
-    function problem($error)
-    {
-        echo "We are very sorry, but there were error(s) found with the form you submitted. ";
-        echo "These errors appear below.<br><br>";
-        echo $error . "<br><br>";
-        echo "Please go back and fix these errors.<br><br>";
-        die();
+    function sendJsonResponse($status, $message) {
+        header('Content-Type: application/json');
+        die(json_encode(['status' => $status, 'message' => $message]));
     }
 
-    // validation expected data exists
-    if (
-        !isset($_POST['Name']) ||
-        !isset($_POST['Email']) ||
-        !isset($_POST['Message'])
-    ) {
-        problem('We are sorry, but there appears to be a problem with the form you submitted.');
+    // Validate required fields
+    $required_fields = ['Name', 'Email', 'Message'];
+    foreach ($required_fields as $field) {
+        if (!isset($_POST[$field]) || empty(trim($_POST[$field]))) {
+            sendJsonResponse('error', "Please fill in all required fields.");
+        }
     }
 
-    $name = $_POST['Name']; // required
-    $email = $_POST['Email']; // required
-    $message = $_POST['Message']; // required
+    // Sanitize and validate input
+    $name = filter_var(trim($_POST['Name']), FILTER_SANITIZE_STRING);
+    $email = filter_var(trim($_POST['Email']), FILTER_VALIDATE_EMAIL);
+    $message = filter_var(trim($_POST['Message']), FILTER_SANITIZE_STRING);
 
-    $error_message = "";
-    $email_exp = '/^[A-Za-z0-9._%-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$/';
-
-    if (!preg_match($email_exp, $email)) {
-        $error_message .= 'The Email address you entered does not appear to be valid.<br>';
+    if (!$email) {
+        sendJsonResponse('error', 'Please provide a valid email address.');
     }
 
-    $string_exp = "/^[A-Za-z .'-]+$/";
-
-    if (!preg_match($string_exp, $name)) {
-        $error_message .= 'The Name you entered does not appear to be valid.<br>';
+    if (!preg_match("/^[A-Za-z .'-]+$/", $name)) {
+        sendJsonResponse('error', 'Please provide a valid name.');
     }
 
     if (strlen($message) < 2) {
-        $error_message .= 'The Message you entered do not appear to be valid.<br>';
+        sendJsonResponse('error', 'Please provide a valid message.');
     }
 
-    if (strlen($error_message) > 0) {
-        problem($error_message);
+    // Prepare email content
+    $email_message = "New contact form submission:\n\n";
+    $email_message .= "Name: " . $name . "\n";
+    $email_message .= "Email: " . $email . "\n";
+    $email_message .= "Message:\n" . $message . "\n";
+
+    // Prepare headers with proper encoding
+    $headers = [
+        'From' => $email,
+        'Reply-To' => $email,
+        'X-Mailer' => 'PHP/' . phpversion(),
+        'Content-Type' => 'text/plain; charset=UTF-8',
+        'MIME-Version' => '1.0'
+    ];
+
+    // Send email
+    $mail_sent = mail($email_to, $email_subject, $email_message, $headers);
+
+    if (!$mail_sent) {
+        error_log("Failed to send contact form email from: " . $email);
+        sendJsonResponse('error', 'Failed to send message. Please try again later.');
     }
 
-    $email_message = "Form details below.\n\n";
-
-    function clean_string($string)
-    {
-        $bad = array("content-type", "bcc:", "to:", "cc:", "href");
-        return str_replace($bad, "", $string);
-    }
-
-    $email_message .= "Name: " . clean_string($name) . "\n";
-    $email_message .= "Email: " . clean_string($email) . "\n";
-    $email_message .= "Message: " . clean_string($message) . "\n";
-
-    // create email headers
-    $headers = 'From: ' . $email . "\r\n" .
-        'Reply-To: ' . $email . "\r\n" .
-        'X-Mailer: PHP/' . phpversion();
-    @mail($email_to, $email_subject, $email_message, $headers);
-?>
-
-    <!-- include your success message below -->
-
-    Thank you for contacting me. I will be in touch with you very soon.
-
-<?php
+    sendJsonResponse('success', 'Thank you for your message. We will contact you soon.');
 }
 ?>
